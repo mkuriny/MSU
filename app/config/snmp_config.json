@@ -1,0 +1,7 @@
+{
+    "ip_range": "127.0.0.1-127.0.0.10",
+    "timeout": 2,
+    "retries": 0,
+    "community": "public",
+    "v3_user": null
+}

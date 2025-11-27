@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Device Monitor</title>
+    <link rel="stylesheet" href="/static/style.css?v=3">
+    </head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📡 Монитор сетевых устройств</h1>
+            <div class="stats">
+                <span id="online-count">0 онлайн</span>
+                <span id="total-count">0 всего</span>
+                <span id="last-update">Обновление: -</span>
+            </div>
+        </header>
+
+        <!-- Панель управления -->
+        <div class="controls">
+            <button id="refreshBtn">🔍 Сканировать сеть</button>
+            <button id="add-device-btn">➕ Добавить устройство</button>
+            <button id="snmp-settings-btn">⚙️ Настройки SNMP</button>
+            <button id="loginBtn">🔑 Войти</button>
+            <button id="logoutBtn" style="display:none; background:#dc3545;">🚪 Выйти</button>
+        </div>
+
+        <!-- Модальное окно авторизации -->
+        <div class="modal" id="loginModal" style="display:none;">
+            <div class="modal-content">
+                <h3>Авторизация</h3>
+                <form id="loginForm">
+                    <label for="username">Имя пользователя:</label>
+                    <input type="text" id="username" required>
+
+                    <label for="password">Пароль:</label>
+                    <input type="password" id="password" required>
+
+                    <div style="text-align:right;">
+                        <button type="submit" style="background:#007bff; color:white;">Войти</button>
+                        <button type="button" id="cancelLogin">Отмена</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Контейнер для карточек -->
+        <div class="devices-grid" id="devicesContainer">
+            <!-- JS вставит сюда устройства -->
+        </div>
+
+        <!-- Настройки SNMP -->
+        <div id="snmpModal" class="modal" style="display:none;">
+		  <div class="modal-content">
+			<h3>⚙️ Настройки SNMP</h3>
+			<form id="snmpForm">
+			  <label>IP диапазон:<br><input type="text" id="ipRange"></label><br><br>
+			  <label>Timeout (сек):<br><input type="number" id="timeout"></label><br><br>
+			  <label>Retries:<br><input type="number" id="retries"></label><br><br>
+			  <label>Community:<br><input type="text" id="community"></label><br><br>
+
+			  <h3>SNMPv3 (необязательно)</h3>
+			  <label>User:<br><input type="text" id="v3_user"></label><br>
+			  <label>Auth Key:<br><input type="text" id="authKey"></label><br>
+			  <label>Auth Protocol:<br><input type="text" id="authProtocol"></label><br>
+			  <label>Priv Key:<br><input type="text" id="privKey"></label><br>
+			  <label>Priv Protocol:<br><input type="text" id="privProtocol"></label><br><br>
+
+			  <div class="modal-buttons">
+				<button type="button" id="saveSettingsBtn">💾 Сохранить</button>
+				<button type="button" id="cancelSettingsBtn">↩️ Отменить</button>
+				<button type="button" id="defaultSettingsBtn">🔄 По умолчанию</button>
+			  </div>
+			</form>
+		  </div>
+		</div>
+
+
+    </div>
+
+<script src="/static/script.js"></script>
+
+</body>
+</html>
