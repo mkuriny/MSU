@@ -1,35 +1,53 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from app.routers import devices_router, snmp_router, user_router
-from app.core.container import Container
+from routers import devices_router, snmp_router, user_router
+from core.container import Container
+from services.arp_service import ARPService
 import logging
+from core.dependencies import get_current_user
+import asyncio
+from core.middleware.auth_middleware import AuthMiddleware
+from routers import auth_router
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
 
+
+async def debug_console():
+    while True:
+        try:
+            cmd = input("debug> ")
+        except EOFError:
+            break
+
+        if cmd == "arp":
+            print(ARPService().get_arp_table())
+        elif cmd == "exit":
+            break
+
+
+      
 class Application:
     """Главный класс приложения (инкапсулирует конфигурацию и зависимости)."""
 
     def __init__(self):
         self.container = Container()
         self.app = FastAPI(title="My FastAPI App", version="1.0.0")
-
+        self.app.include_router(user_router.router, prefix="/users", tags=["Users"])
+        self.app.add_middleware(AuthMiddleware)
         # Подключение статических файлов
-        self.app.mount("/static", StaticFiles(directory="app/static"), name="static")
+        self.app.mount("/static", StaticFiles(directory="static"), name="static")
 
         # Настройка шаблонов
-        self.templates = Jinja2Templates(directory="app/templates")
+        self.templates = Jinja2Templates(directory="templates")
 	
         # Подключение маршрутов
         self._register_routes()
 
     def _register_routes(self):
         """Подключение всех маршрутов."""
-        self.app.include_router(user_router.router, prefix="/users", tags=["Users"])
+        self.app.include_router(user_router.router, prefix="/auth")
+        self.app.include_router(auth_router.router, prefix="/auth")
         self.app.include_router(devices_router.router, prefix="/devices", tags=["Devices"])
         self.app.include_router(snmp_router.router, prefix="/snmp", tags=["SNMP"])
 
@@ -50,9 +68,16 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-
+@app.get("/debug/arp")
+async def debug_arp():
+    return ARPService().get_arp_table()
 print("Routers:", [route.path for route in app.routes])  # ← для отладки
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+@app.get("/debug/ping/{ip}")
+async def debug_ping(ip: str):
+    from app.services.snmp_service import SNMPService
+    snmp = SNMPService()
+    alive = await snmp.ping(ip)
+    return {"ip": ip, "alive": alive}
+    
+

@@ -1,4 +1,4 @@
-from app.core.interfaces import IUserRepository
+from core.interfaces import IUserRepository
 
 
 class UserRepository(IUserRepository):

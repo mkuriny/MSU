@@ -1,0 +1,15 @@
+# Используем официальный образ Python
+FROM python:3.11
+
+# Рабочая директория внутри контейнера — корень проекта
+WORKDIR /app
+
+# Копируем зависимости и ставим их
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Копируем всё остальное
+COPY . .
+
+# Запуск приложения через Uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

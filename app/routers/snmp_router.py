@@ -2,14 +2,15 @@ import ipaddress
 import asyncio
 import json
 import os
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import List
 from sqlalchemy.exc import SQLAlchemyError
-
-from app.services.snmp_service import SNMPService
-from app.core.db import SessionLocal
-from app.models.device import Device
-
+from services.audit_service import log_action
+from services.snmp_service import SNMPService
+from core.db import SessionLocal
+from models.device import Device
+from core.permissions import require_role
+from models.user import UserRole
 router = APIRouter()
 
 CONFIG_PATH = "app/config/snmp_config.json"
@@ -61,27 +62,39 @@ def save_config(data):
 # ===================== #
 
 @router.get("/config")
-async def get_snmp_config():
+async def get_snmp_config(
+    _: None = Depends(require_role(UserRole.admin, UserRole.user))
+):
     """Получить текущую конфигурацию SNMP."""
     return read_config()
 
 
 @router.post("/config/save")
-async def save_snmp_config(data: dict):
+async def save_snmp_config(
+    data: dict,
+    _: None = Depends(require_role(UserRole.admin, UserRole.user))
+):
     """Сохранить текущие настройки SNMP."""
     save_config(data)
     return {"status": "saved"}
 
 
 @router.post("/config/defaults")
-async def reset_snmp_config():
+async def reset_snmp_config(
+    data: dict,
+    _: None = Depends(require_role(UserRole.admin, UserRole.user))
+):
     """Восстановить настройки SNMP по умолчанию."""
     save_config(DEFAULT_CONFIG)
     return {"status": "reset to defaults"}
 
 
 @router.post("/scan")
-async def snmp_scan():
+async def snmp_scan(
+    request: Request,
+
+    _: None = Depends(require_role(UserRole.admin, UserRole.user))
+):
     """
     Сканирование сети по текущим настройкам SNMP
     и сохранение найденных устройств в БД.
@@ -107,6 +120,9 @@ async def snmp_scan():
         added, updated = 0, 0
 
         for device_info in result["details"]:
+            if device_info.get("alive") is False:
+                print(f"Пропуск {device_info['ip']}: недоступен")
+                continue
             ip = device_info["ip"]
             results = device_info["results"]
 
@@ -114,7 +130,7 @@ async def snmp_scan():
             description = results.get("1.3.6.1.2.1.1.1.0", {}).get("value", "No description")
 
             existing = db.query(Device).filter(Device.Location == ip).first()
-
+            mac = device_info.get("mac")
             if existing:
                 existing.Name = name
                 existing.Description = description
@@ -128,12 +144,14 @@ async def snmp_scan():
                     UpdateTime=None,
                     OC="Unknown",
                     Log="_",
-                    MAC=None
+                    MAC=mac
                 )
                 db.add(new_device)
                 added += 1
 
         db.commit()
+
+
         db.close()
 
         print(f"✅ Сканирование завершено: добавлено {added}, обновлено {updated}")
@@ -151,3 +169,4 @@ async def snmp_scan():
     except Exception as e:
         print("❌ Ошибка SNMP сканирования:", e)
         raise HTTPException(status_code=500, detail=f"Ошибка SNMP сканирования: {e}")
+    
