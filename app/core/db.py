@@ -1,16 +1,16 @@
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from app.core.logger import logger
-
+from sqlalchemy.orm import sessionmaker, declarative_base
+from core.logger import logger
+import os 
 # Настройки подключения
-DB_USER = "root"
-DB_PASSWORD = "root"  # если есть
-DB_HOST = "127.0.0.1"
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_HOST = os.getenv("DB_HOST", "host.docker.internal")
 DB_PORT = "3306"
-DB_NAME = "program"
+DB_NAME = os.getenv("DB_NAME", "1")
 
-DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
+Base = declarative_base()
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

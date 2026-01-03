@@ -1,5 +1,5 @@
-from app.repositories.user_repository import UserRepository
-from app.services.user_service import UserService
+from repositories.user_repository import UserRepository
+from services.user_service import UserService
 
 
 class Container:

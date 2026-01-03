@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Device Monitor</title>
-    <link rel="stylesheet" href="/static/style.css?v=3">
+    <link rel="stylesheet" href="/static/style.css?v=7">
     </head>
 <body>
     <div class="container">
@@ -22,8 +22,8 @@
             <button id="refreshBtn">🔍 Сканировать сеть</button>
             <button id="add-device-btn">➕ Добавить устройство</button>
             <button id="snmp-settings-btn">⚙️ Настройки SNMP</button>
-            <button id="loginBtn">🔑 Войти</button>
-            <button id="logoutBtn" style="display:none; background:#dc3545;">🚪 Выйти</button>
+			<button onclick="openUsers()">👥 Управление пользователями</button>
+			<button onclick="logout()">🔑 Выйти</button>
         </div>
 
         <!-- Модальное окно авторизации -->
@@ -44,7 +44,39 @@
                 </form>
             </div>
         </div>
+		<div id="usersModal" class="modal hidden">
+		<div class="modal-content wide">
+			<h3>👥 Управление пользователями</h3>
 
+			<div id="usersList"></div>
+
+			<button class="btn btn-success" id="openAddUserBtn">➕ Добавить пользователя</button>
+			<button class="btn btn-secondary" id="closeUsersBtn">Закрыть</button>
+
+		    </div>
+		</div>
+		
+		<div id="addUserModal" class="modal hidden">
+		  <div class="modal-content">
+			<h3>➕ Новый пользователь</h3>
+
+			<input id="newLogin" placeholder="Логин">
+			<input id="newPass" type="password" placeholder="Пароль">
+			<input id="newPass2" type="password" placeholder="Повтор пароля">
+
+			<select id="newRole">
+			  <option value="user">Пользователь</option>
+			  <option value="monitor">Монитор</option>
+			  <option value="admin">Администратор</option>
+			</select>
+
+			<p id="addUserError" class="error"></p>
+
+			<button id="createUserBtn">Создать</button>
+			<button id="closeAddUserBtn">Отмена</button>
+		  </div>
+		</div>
+		
         <!-- Контейнер для карточек -->
         <div class="devices-grid" id="devicesContainer">
             <!-- JS вставит сюда устройства -->
@@ -75,11 +107,99 @@
 			</form>
 		  </div>
 		</div>
+		<div id="addDeviceModal" class="modal hidden">
+		  <div class="modal-content">
 
+			<h3>➕ Добавить устройство</h3>
+			<p id="addDeviceError" class="error"></p>
+			<div class="add-device-form">
+
+			  <div class="full">
+				<label>IP адрес <span class="required">*</span></label>
+				<input id="devIp" type="text" required placeholder="192.168.1.10">
+			  </div>
+
+			  <div>
+				<label>Имя</label>
+				<input id="devName" type="text">
+			  </div>
+
+			  <div>
+				<label>MAC</label>
+				<input id="devMac" type="text">
+			  </div>
+
+			  <div class="full">
+				<label>Описание</label>
+				<input id="devDesc" type="text">
+			  </div>
+
+			  <div class="full">
+				<label>Производитель</label>
+				<input id="devOs" type="text">
+			  </div>
+
+			</div>
+
+			<div class="modal-actions">
+			  <button id="createDeviceBtn">➕ Добавить</button>
+			  <button id="closeAddDeviceBtn">Отмена</button>
+			</div>
+
+		  </div>
+		</div>
+		
+		<div id="deviceConfigModal" class="modal hidden">
+		  <div class="modal-content">
+
+			<h3>Конфигурации устройства</h3>
+
+			<div id="configStatus">
+			  <!-- сюда динамически -->
+			</div>
+
+			<hr>
+
+			<h4>Сохранить текущую конфигурацию</h4>
+
+			<label>
+			  Формат хранения:
+			  <select id="configStorage">
+				<option value="db">BLOB</option>
+				<option value="file">Фаил</option>
+			  </select>
+			</label>
+
+			<label>
+			  Комментарий:
+			  <input type="text" id="configComment" placeholder="например: перед обновлением">
+			</label>
+
+			<button id="saveConfigBtn">💾 Сохранить</button>
+			<button id="ImportConfigBtn">📲️ Импортировать</button>
+			<input type="file" id="configFileInput" accept=".cfg,.txt" hidden>
+			
+
+			<hr>
+
+			<h4>Сохранённые конфигурации</h4>
+
+			<div id="configsList">
+			  <!-- список конфигов -->
+			</div>
+
+			<div class="modal-actions">
+			  <button onclick="closeDeviceConfig()">Закрыть</button>
+			</div>
+
+		  </div>
+		</div>
+		
+		
 
     </div>
 
-<script src="/static/script.js"></script>
+<script src="/static/script.js?v=8"></script>
 
 </body>
 </html>

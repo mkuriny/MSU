@@ -1,4 +1,32 @@
+let CURRENT_USER = null;
+function applyRoleUI(role) {
+  const btnScan = document.getElementById("refreshBtn");
+  const btnAddDevice = document.getElementById("add-device-btn");
+  const btnUsers = document.querySelector("button[onclick='openUsers()']");
+  const btnSnmp = document.getElementById("snmp-settings-btn");
+  // monitor — только просмотр
+  if (role === "monitor") {
+    btnScan?.remove();
+    btnAddDevice?.remove();
+    btnUsers?.remove();
+	btnSnmp?.remove();
+    // убрать кнопки удаления устройств
+    document.body.classList.add("role-monitor");
+  }
 
+  // user — всё кроме управления пользователями
+  if (role === "user") {
+    btnUsers?.remove();
+  }
+}
+async function loadCurrentUser() {
+  try {
+    CURRENT_USER = await safeFetch("/auth/me");
+    applyRoleUI(CURRENT_USER.role);
+  } catch (e) {
+    console.error("Не удалось получить пользователя", e);
+  }
+}
 /* ---------- Утилиты ---------- */
 async function safeFetch(url, options = {}) {
   try {
@@ -17,60 +45,73 @@ async function safeFetch(url, options = {}) {
   }
 }
 
+async function logout() {
+    await fetch("/auth/logout", { method: "POST" });
+    window.location.href = "/auth/login";
+}
 /* ---------- Загрузка и отображение устройств ---------- */
 async function loadDevices() {
   try {
-    const res = await safeFetch("/devices");
-    const devices = Array.isArray(res) ? res : [];
+    const devices = await safeFetch("/devices");
     const container = document.getElementById("devicesContainer");
     container.innerHTML = "";
 
     let onlineCount = 0;
+
     devices.forEach(d => {
-      const isOnline = d.UpTime && d.UpTime !== "Unknown" && d.UpTime !== "—";
+      const card = document.createElement("div");
+      card.className = "device-card";
+
+      const isOnline = d.UpTime && d.UpTime !== "N/A";
       if (isOnline) onlineCount++;
 
-      const card = document.createElement("div");
-      card.className = "device-card " + (isOnline ? "online" : "offline");
       card.innerHTML = `
-		<div class="status-label">${isOnline ? "ONLINE" : "OFFLINE"}</div>
-		<button class="delete-btn" title="Удалить устройство">🗑️</button>
-		<h3>${d.Name || "Unknown"}</h3>
-		<p><strong>Описание:</strong> ${d.Description || "—"}</p>
-		<p><strong>Местоположение:</strong> ${d.Location || "—"}</p>
-		<p><strong>Время работы:</strong> ${d.UpTime || "—"}</p>
-		<p><strong>Время обновления:</strong> ${d.UpdateTime || "—"}</p>
-		<p><strong>Прошивка:</strong> ${d.OC || "—"}</p>
-		<p><strong>Лог:</strong> ${d.Log || "—"}</p>
-		<p><strong>MAC:</strong> ${d.MAC || "—"}</p>
-	`;
-	card.querySelector(".delete-btn").addEventListener("click", async () => {
-		if (!confirm(`Удалить устройство "${d.Name}"?`)) return;
-
-		const res = await fetch(`/devices/${encodeURIComponent(d.Name)}`, {
-			method: "DELETE"
-		});
-
-		if (res.ok) {
-			card.remove(); // удалить из интерфейса
-			a
+		  <div class="status-label">${isOnline ? "ONLINE" : "OFFLINE"}</div>
+		  ${
+			CURRENT_USER?.role !== "monitor"
+			  ? `<button class="delete-btn" title="Удалить устройство">🗑️</button>
+				 <button class="config-btn" title="Конфигурации устройства">⚙️</button>`
+			  : ""
+		  }
+		  <h3>${escapeHtml(d.Name || "Unknown")}</h3>
+		  <p>IP: ${escapeHtml(d.IP || "—")}</p>
+		  <p>Desc: ${escapeHtml(d.Description || "—")}</p>
+		  <p>Vendor: ${escapeHtml(d.Vendor || "—")}</p>
+		  <p>MAC: ${escapeHtml(d.MAC || "—")}</p>
+		  <p>Time: ${escapeHtml(d.UpdateTime || "—")}</p>
+		`;
+		if (CURRENT_USER?.role !== "monitor") {
+		  const deleteBtn = card.querySelector(".delete-btn");
+		  deleteBtn?.addEventListener("click", async () => {
+			if (!confirm(`Удалить устройство "${d.Name}"?`)) return;
+			await fetch(`/devices/${encodeURIComponent(d.Name)}`, { method: "DELETE" });
 			loadDevices();
-		} else {
-			const err = await res.json();
-			alert(`Ошибка: ${err.detail || "Не удалось удалить устройство"}`);
+		  });
+
+		  const configBtn = card.querySelector(".config-btn");
+		  configBtn?.addEventListener("click", () => {
+			openDeviceConfig(d.id);
+		  });
+
 		}
-	});
+
+     
+
       container.appendChild(card);
     });
 
-    document.getElementById("online-count").textContent = `${onlineCount} онлайн`;
-    document.getElementById("total-count").textContent = `${devices.length} всего`;
-    document.getElementById("last-update").textContent = "Обновление: " + new Date().toLocaleTimeString();
+    document.getElementById("online-count").textContent =
+      `${onlineCount} онлайн`;
+    document.getElementById("total-count").textContent =
+      `${devices.length} всего`;
+    document.getElementById("last-update").textContent =
+      "Обновление: " + new Date().toLocaleTimeString();
+
   } catch (err) {
     console.error("loadDevices error:", err);
-    // не ломаем UI — просто покажем в консоли
   }
 }
+
 
 /* Эскейп для вывода в HTML (простая) */
 function escapeHtml(str) {
@@ -111,7 +152,8 @@ async function saveSnmpConfig() {
     await safeFetch(SAVE_URL, {
       method: "POST",
       headers: {"Content-Type":"application/json"},
-      body: JSON.stringify(cfg)
+      body: JSON.stringify(cfg),
+      credentials: "include"   // <-- вот это
     });
     alert("Настройки сохранены");
   } catch (err) {
@@ -125,7 +167,10 @@ async function resetSnmpDefaults() {
   const btn = document.getElementById("defaultSettingsBtn");
   try {
     btn.disabled = true;
-    await safeFetch(DEFAULTS_URL, { method: "POST" });
+    await safeFetch(DEFAULTS_URL, {
+      method: "POST",
+      credentials: "include"   // <-- вот это
+    });
     await loadSnmpConfig();
     alert("Настройки восстановлены по умолчанию");
   } catch (err) {
@@ -134,6 +179,7 @@ async function resetSnmpDefaults() {
     btn.disabled = false;
   }
 }
+
 
 function collectCfgFromForm() {
   return {
@@ -153,46 +199,350 @@ function collectCfgFromForm() {
 
 /* ---------- UI: события ---------- */
 function initUiHandlers() {
-  // Сканировать (использует текущий конфиг на сервере)
-  document.getElementById("refreshBtn").addEventListener("click", async () => {
-    try {
-      const scanBtn = document.getElementById("refreshBtn");
-      scanBtn.disabled = true;
-      const res = await safeFetch(SCAN_URL, { method: "POST" });
-      console.log("SNMP scan result:", res);
-      await loadDevices();
-      // можно показать уведомление с res.summary, но оставлю консоль
-    } catch (err) {
-      alert("Ошибка при запуске сканирования: " + err.message);
-    } finally {
-      document.getElementById("refreshBtn").disabled = false;
-    }
+  const snmpModal = document.getElementById("snmpModal");
+  const usersModal = document.getElementById("usersModal");
+  const addUserModal = document.getElementById("addUserModal");
+
+  /* ---------- SNMP ---------- */
+  document.getElementById("snmp-settings-btn")
+    .addEventListener("click", async () => {
+      snmpModal.style.display = "flex";
+      await loadSnmpConfig();
+    });
+
+  document.getElementById("cancelSettingsBtn")
+    .addEventListener("click", () => {
+      snmpModal.style.display = "none";
+      loadSnmpConfig();
+    });
+
+  /* ---------- USERS ---------- */
+  document.getElementById("openAddUserBtn")
+    ?.addEventListener("click", openAddUser);
+
+  document.getElementById("closeUsersBtn")
+    ?.addEventListener("click", closeUsers);
+
+  /* ---------- NEW USER ---------- */
+  document.getElementById("createUserBtn")
+    ?.addEventListener("click", createUser);
+
+  document.getElementById("closeAddUserBtn")
+    ?.addEventListener("click", closeAddUser);
+  document.getElementById("refreshBtn")
+  .addEventListener("click", scanNetwork);
+  document.getElementById("add-device-btn")
+  ?.addEventListener("click", openAddDevice);
+
+  document.getElementById("createDeviceBtn")
+  ?.addEventListener("click", createDevice);
+
+  document.getElementById("closeAddDeviceBtn")
+  ?.addEventListener("click", closeAddDevice);
+  document.getElementById("saveConfigBtn")
+  ?.addEventListener("click", saveDeviceConfig);
+  
+  document.getElementById("ImportConfigBtn")
+  ?.addEventListener("click", () => {
+    document.getElementById("configFileInput").click();
   });
 
-  // Показ/скрытие формы + загрузка конфигурации при открытии
-  const snmpModal = document.getElementById("snmpModal");
-	document.getElementById("snmp-settings-btn").addEventListener("click", async () => {
-		snmpModal.style.display = "flex";
-		await loadSnmpConfig();
-	});
-
-  // Кнопки в форме
-  document.getElementById("saveSettingsBtn").addEventListener("click", saveSnmpConfig);
-  document.getElementById("cancelSettingsBtn").addEventListener("click", () => {
-	  snmpModal.style.display = "none";
-	  loadSnmpConfig();
-	});
-  document.getElementById("defaultSettingsBtn").addEventListener("click", resetSnmpDefaults);
+document.getElementById("configFileInput")
+  ?.addEventListener("change", importConfigFile);
+  document.getElementById("saveSettingsBtn")
+    .addEventListener("click", saveSnmpConfig);
+document.getElementById("defaultSettingsBtn")
+    .addEventListener("click", resetSnmpDefaults);
 }
-	snmpModal.addEventListener("click", (e) => {
-	  if (e.target === snmpModal) {
-		snmpModal.style.display = "none";
-	  }
-	});
-/* ---------- Инициализация страницы ---------- */
-window.addEventListener("DOMContentLoaded", () => {
-  // Начальная загрузка устройств и привязка обработчиков
+
+
+
+
+/* ---------- Список пользователей ---------- */
+async function openUsers() {
+    const res = await fetch("/users/list");
+    const data = await res.json();
+
+    let html = '<div class="users-list">';
+
+	for (const role in data) {
+		html += `<h4>${role}</h4><ul>`;
+		data[role].forEach(u => {
+			html += `
+			  <li class="${u.active ? "" : "user-disabled"}">
+				<span>${u.username}</span>
+				<span class="user-actions">
+				  <button title="Вкл/выкл" onclick="toggleUser(${u.id})">🔒</button>
+				  <button title="Удалить" onclick="deleteUser(${u.id})">🗑</button>
+				</span>
+			  </li>`;
+		});
+		html += "</ul>";
+	}
+
+	html += "</div>";
+
+    document.getElementById("usersList").innerHTML = html;
+    document.getElementById("usersModal").classList.remove("hidden");
+}
+/* ---------- Создать пользователя ---------- */
+async function createUser() {
+    const login = document.getElementById("newLogin").value;
+	const p1 = document.getElementById("newPass").value;
+	const p2 = document.getElementById("newPass2").value;
+	const role = document.getElementById("newRole").value;
+	const addUserError = document.getElementById("addUserError");
+
+    if (p1 !== p2) {
+        addUserError.innerText = "Пароли не совпадают";
+        return;
+    }
+
+    const data = new URLSearchParams();
+    data.append("username", login);
+    data.append("password", p1);
+    data.append("role", role);
+
+    const res = await fetch("/users/create", {
+        method: "POST",
+        body: data
+    });
+
+    if (res.ok) {
+        closeAddUser();
+        openUsers();
+    } else {
+        addUserError.innerText = "Ошибка создания";
+    }
+}
+async function toggleUser(id) {
+    await fetch(`/users/toggle/${id}`, { method: "POST" });
+    openUsers();
+}
+
+async function deleteUser(id) {
+    if (!confirm("Удалить пользователя?")) return;
+    await fetch(`/users/${id}`, { method: "DELETE" });
+    openUsers();
+}
+/* ---------- Управление модалками пользователей ---------- */
+
+function openAddUser() {
+    document.getElementById("addUserError").innerText = "";
+    document.getElementById("newLogin").value = "";
+    document.getElementById("newPass").value = "";
+    document.getElementById("newPass2").value = "";
+    document.getElementById("newRole").value = "user";
+
+    document.getElementById("addUserModal").classList.remove("hidden");
+}
+
+function closeAddUser() {
+    document.getElementById("addUserModal").classList.add("hidden");
+}
+
+function closeUsers() {
+    document.getElementById("usersModal").classList.add("hidden");
+}
+async function scanNetwork() {
+  const btn = document.getElementById("refreshBtn");
+  try {
+    btn.disabled = true;
+    btn.textContent = "⏳ Сканирование...";
+
+    await safeFetch("/snmp/scan", { method: "POST" });
+
+    await loadDevices(); // обновляем список после скана
+  } catch (err) {
+    alert("Ошибка сканирования: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔍 Сканировать сеть";
+  }
+}
+window.addEventListener("DOMContentLoaded", async () => {
+  await loadCurrentUser();   // 👈 СНАЧАЛА роль
   loadDevices();
   initUiHandlers();
 });
 
+
+function openAddDevice() {
+  document.getElementById("addDeviceError").innerText = "";
+  document.getElementById("devIp").value = "";
+  document.getElementById("devName").value = "";
+  document.getElementById("devDesc").value = "";
+  document.getElementById("devOs").value = "";
+  document.getElementById("devMac").value = "";
+
+  document.getElementById("addDeviceModal").classList.remove("hidden");
+}
+
+function closeAddDevice() {
+  document.getElementById("addDeviceModal").classList.add("hidden");
+}
+
+async function createDevice() {
+  const ip = document.getElementById("devIp").value.trim();
+  const error = document.getElementById("addDeviceError");
+
+  if (!ip) {
+    error.innerText = "IP обязателен";
+    return;
+  }
+
+  const data = new URLSearchParams();
+  data.append("ip", ip);
+  data.append("name", document.getElementById("devName").value || "—");
+  data.append("description", document.getElementById("devDesc").value || "—");
+  data.append("Vendor", document.getElementById("devOs").value || "—");
+  data.append("mac", document.getElementById("devMac").value || "—");
+
+  try {
+    const res = await fetch("/devices/create", {
+      method: "POST",
+      body: data
+    });
+
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t);
+    }
+
+    closeAddDevice();
+    loadDevices();
+  } catch (e) {
+    error.innerText = "Ошибка добавления устройства";
+  }
+}
+/* GUI окна конфигурации*/
+async function openDeviceConfig(deviceId) {
+  const modal = document.getElementById("deviceConfigModal");
+  modal.classList.remove("hidden");
+
+  await loadDeviceConfigs(deviceId);
+
+  modal.dataset.deviceId = deviceId;
+}
+async function loadDeviceConfigs(deviceId) {
+  const container = document.getElementById("configsList");
+  container.innerHTML = "Загрузка...";
+
+  const configs = await safeFetch(`/devices/${deviceId}/configs`);
+
+  if (!configs.length) {
+    container.innerHTML = "<p class='muted'>Конфигураций нет</p>";
+    return;
+  }
+
+  container.innerHTML = "";
+
+  configs.forEach(cfg => {
+    const div = document.createElement("div");
+    div.className = "config-item";
+
+    div.innerHTML = `
+      <div>
+        <b>${new Date(cfg.created_at).toLocaleString()}</b>
+        <span>(${cfg.storage})</span>
+        ${cfg.comment ? `<br>${escapeHtml(cfg.comment)}` : ""}
+      </div>
+      <div class="config-actions">
+        <button onclick="applyConfig(${deviceId}, ${cfg.id})">💾️ Применить</button>
+		<button onclick="downloadConfig(${cfg.id})">💻️ Экспортировать</button>
+      </div>
+    `;
+
+    container.appendChild(div);
+  });
+}
+
+async function saveDeviceConfig() {
+  const deviceId = document
+    .getElementById("deviceConfigModal")
+    .dataset.deviceId;
+
+  const storage = document.getElementById("configStorage").value;
+  const comment = document.getElementById("configComment").value;
+
+  await safeFetch(`/devices/${deviceId}/configs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      storage,
+      comment
+    })
+  });
+
+  await loadDeviceConfigs(deviceId);
+}
+
+async function applyConfig(configId) {
+  if (!confirm("Применить конфигурацию к устройству?")) return;
+
+  await safeFetch(`/configs/${configId}/apply`, { method: "POST" });
+  alert("Конфигурация отправлена на устройство");
+}
+
+function downloadConfig(configId) {
+  window.location.href = `/devices/${configId}/download`;
+}
+
+function closeDeviceConfig() {
+  document.getElementById("deviceConfigModal").classList.add("hidden");
+}
+
+async function saveDeviceConfig() {
+  const deviceId =
+    document.getElementById("deviceConfigModal").dataset.deviceId;
+
+  const storage = document.getElementById("configStorage").value;
+  const comment = document.getElementById("configComment").value;
+
+  await safeFetch(`/devices/${deviceId}/configs/fetch?storage=${storage}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment })
+  });
+
+  await loadDeviceConfigs(deviceId);
+}
+
+/* Импорт*/
+async function importConfigFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const deviceId =
+    document.getElementById("deviceConfigModal").dataset.deviceId;
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("comment", `Импортировано: ${file.name}`);
+
+  try {
+    await fetch(`/devices/${deviceId}/configs/import`, {
+      method: "POST",
+      body: form
+    });
+
+    await loadDeviceConfigs(deviceId);
+    alert("Конфигурация импортирована");
+  } catch (e) {
+    alert("Ошибка импорта");
+  } finally {
+    event.target.value = ""; // сброс input
+  }
+}
+
+function applyConfig(deviceId, configId) {
+    fetch(`/devices/${deviceId}/configs/${configId}/apply`, {
+        method: "POST"
+    })
+    .then(res => {
+        if (!res.ok) throw new Error("Apply failed");
+        return res.json();
+    })
+    .then(() => alert("Конфигурация применена"))
+    .catch(err => alert(err.message));
+}
